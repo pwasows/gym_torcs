@@ -7,7 +7,6 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.optimizers import Adam
 import tensorflow as tf
-from keras.engine.training import collect_trainable_weights
 import json
 
 from ReplayBuffer import ReplayBuffer
@@ -15,10 +14,12 @@ from ActorNetwork import ActorNetwork
 from CriticNetwork import CriticNetwork
 from OU import OU
 import timeit
+import time
+import sys
 
 OU = OU()       #Ornstein-Uhlenbeck Process
 
-def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
+def playGame(train_indicator=1):    #1 means Train, 0 means simply Run
     BUFFER_SIZE = 100000
     BATCH_SIZE = 32
     GAMMA = 0.99
@@ -35,16 +36,21 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
 
     EXPLORE = 100000.
     episode_count = 2000
-    max_steps = 100000
+    #my PC is able to perform about 1000 steps/min
+    #max episode length of 5000 steps translates to ~ 5 minutes
+    max_steps_in_episode = 5000
     reward = 0
     done = False
     step = 0
     epsilon = 1
     indicator = 0
 
-    #Tensorflow GPU optimization
     config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
+
+    #Tensorflow CPU optimization (https://www.tensorflow.org/guide/performance/overview#optimizing_for_cpu)
+    config.intra_op_parallelism_threads = 4
+    config.inter_op_parallelism_threads = 4
+
     sess = tf.Session(config=config)
     from keras import backend as K
     K.set_session(sess)
@@ -56,7 +62,6 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
     # Generate a Torcs environment
     env = TorcsEnv(vision=vision, throttle=True,gear_change=False)
 
-    #Now load the weight
     print("Now we load the weight")
     try:
         actor.model.load_weights("actormodel.h5")
@@ -80,7 +85,10 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
         s_t = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY,  ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm))
      
         total_reward = 0.
-        for j in range(max_steps):
+
+        observations_in_episode = []
+        #for j in range(max_steps):
+        for j in range(max_steps_in_episode):
             loss = 0 
             epsilon -= 1.0 / EXPLORE
             a_t = np.zeros([1,action_dim])
@@ -92,15 +100,16 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
             noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2], -0.1 , 1.00, 0.05)
 
             #The following code do the stochastic brake
-            #if random.random() <= 0.1:
-            #    print("********Now we apply the brake***********")
-            #    noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
+            if random.random() <= 0.1:
+                print("********Now we apply the brake***********")
+                noise_t[0][2] = train_indicator * max(epsilon, 0) * OU.function(a_t_original[0][2],  0.2 , 1.00, 0.10)
 
             a_t[0][0] = a_t_original[0][0] + noise_t[0][0]
             a_t[0][1] = a_t_original[0][1] + noise_t[0][1]
             a_t[0][2] = a_t_original[0][2] + noise_t[0][2]
 
             ob, r_t, done, info = env.step(a_t[0])
+            observations_in_episode.append(ob)
 
             s_t1 = np.hstack((ob.angle, ob.track, ob.trackPos, ob.speedX, ob.speedY, ob.speedZ, ob.wheelSpinVel/100.0, ob.rpm))
         
@@ -155,8 +164,29 @@ def playGame(train_indicator=0):    #1 means Train, 0 means simply Run
         print("Total Step: " + str(step))
         print("")
 
+        simulation_results_filepath = "./simulation_results"
+        returns_filepath = simulation_results_filepath + "/returns"
+        with open(returns_filepath, "a") as returns_file:
+            returns_file.write("Episode: {} Return: {} \n".format(i, total_reward))
+
+
+        #observations_filepath = "observations/observations_in_episode_" + str(i)
+        #print("saving observations to: " + observations_filepath)
+        #with open(observations_filepath, "w") as observations_file:
+            #TODO: observations_in_episode probably cannot be json serialized - fix this
+            #json.dump({"observations": observations_in_episode}, observations_file)
+
     env.end()  # This is for shutting down TORCS
     print("Finish.")
 
 if __name__ == "__main__":
+    start_time = time.time()
+
+    # try:
     playGame()
+    # except:
+        # print("Unexpected error:", sys.exc_info()[0])
+        # print("Unexpected error:", str(sys.exc_info()))
+
+    end_time = time.time()
+    print("elapsed time: " + str(end_time - start_time))

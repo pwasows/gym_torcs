@@ -1,7 +1,6 @@
 import gym
 from gym import spaces
 import numpy as np
-# from os import path
 import snakeoil3_gym as snakeoil3
 import numpy as np
 import copy
@@ -24,13 +23,12 @@ class TorcsEnv:
 
         self.initial_run = True
 
-        ##print("launch torcs")
         os.system('pkill torcs')
         time.sleep(0.5)
         if self.vision is True:
             os.system('torcs -nofuel -nodamage -nolaptime -vision &')
         else:
-            os.system('torcs -nofuel -nolaptime &')
+            os.system('torcs -T -nofuel -nolaptime &')
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)
@@ -60,7 +58,6 @@ class TorcsEnv:
             self.observation_space = spaces.Box(low=low, high=high)
 
     def step(self, u):
-       #print("Step")
         # convert thisAction to the actual torcs actionstr
         client = self.client
 
@@ -168,8 +165,6 @@ class TorcsEnv:
         return self.get_obs(), reward, client.R.d['meta'], {}
 
     def reset(self, relaunch=False):
-        #print("Reset")
-
         self.time_step = 0
 
         if self.initial_reset is not True:
@@ -203,13 +198,12 @@ class TorcsEnv:
         return self.observation
 
     def reset_torcs(self):
-       #print("relaunch torcs")
         os.system('pkill torcs')
         time.sleep(0.5)
         if self.vision is True:
             os.system('torcs -nofuel -nodamage -nolaptime -vision &')
         else:
-            os.system('torcs -nofuel -nolaptime &')
+            os.system('torcs -T -nofuel -nolaptime &')
         time.sleep(0.5)
         os.system('sh autostart.sh')
         time.sleep(0.5)

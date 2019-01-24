@@ -1,10 +1,11 @@
 import numpy as np
 import math
-from keras.initializations import normal, identity
+from keras.initializers import RandomNormal
 from keras.models import model_from_json
 from keras.models import Sequential, Model
-from keras.engine.training import collect_trainable_weights
-from keras.layers import Dense, Flatten, Input, merge, Lambda
+from keras.layers import Dense, Flatten, Input, Lambda
+from keras.layers.merge import concatenate
+
 from keras.optimizers import Adam
 import tensorflow as tf
 import keras.backend as K
@@ -48,10 +49,10 @@ class ActorNetwork(object):
         S = Input(shape=[state_size])   
         h0 = Dense(HIDDEN1_UNITS, activation='relu')(S)
         h1 = Dense(HIDDEN2_UNITS, activation='relu')(h0)
-        Steering = Dense(1,activation='tanh',init=lambda shape, name: normal(shape, scale=1e-4, name=name))(h1)  
-        Acceleration = Dense(1,activation='sigmoid',init=lambda shape, name: normal(shape, scale=1e-4, name=name))(h1)   
-        Brake = Dense(1,activation='sigmoid',init=lambda shape, name: normal(shape, scale=1e-4, name=name))(h1) 
-        V = merge([Steering,Acceleration,Brake],mode='concat')          
+        Steering = Dense(1, activation='tanh', kernel_initializer=RandomNormal(mean=0.0, stddev=1e-4))(h1)
+        Acceleration = Dense(1,activation='sigmoid',kernel_initializer=RandomNormal(mean=0.0, stddev=1e-4))(h1)   
+        Brake = Dense(1,activation='sigmoid',kernel_initializer=RandomNormal(mean=0.0, stddev=1e-4))(h1) 
+        V = concatenate([Steering, Acceleration, Brake])
         model = Model(input=S,output=V)
         return model, model.trainable_weights, S
 
